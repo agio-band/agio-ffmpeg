@@ -1,0 +1,32 @@
+[project]
+name = "agio-ffmpeg"
+version = "0.0.1"
+description = "FFmpeg tools for agio pipeline"
+authors = [
+    { name = "paul", email = "paulwinex@gmail.com" }
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = []
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"agio_ffmpeg" = [
+    "__agio__.yml",
+]
+
+[build-system]
+requires = ["uv", "wheel", "setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]

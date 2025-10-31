@@ -1,0 +1,14 @@
+name: agio_ffmpeg
+version: 0.0.1
+label: agio FFmpeg
+description: |
+  agio FFmpeg package
+icon: ""
+
+tags:
+
+urls:
+  source_url: "https://github.com/agio-band/agio-ffmpeg.git"
+  home_page: "https://github.com/agio-band/agio-ffmpeg.git"
+  documentation: "https://github.com/agio-band/agio-ffmpeg.git"
+  bug_tracker: ""
