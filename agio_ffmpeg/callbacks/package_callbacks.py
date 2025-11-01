@@ -1,4 +1,5 @@
-import itertools
+import hashlib
+import json
 import logging
 import os
 import shutil
@@ -9,15 +10,42 @@ from pathlib import Path
 
 from agio.core.workspaces import AWorkspaceManager, APackageManager
 from agio.tools import network as net
+from agio.tools.cache_tools import get_files_from_cache, save_file_to_cache
 
-WINDOWS_URL = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip'
-LINUX_URL = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz'
-MACOS_URL = (
-    'https://evermeet.cx/ffmpeg/ffmpeg-8.0.zip',
-    'https://evermeet.cx/ffmpeg/ffprobe-8.0.zip'
-)
-EXT = '.exe.' if os.name == 'nt' else ''
-TOOLS_TO_INSTALL = ['ffmpeg'+EXT, 'ffprobe'+EXT]
+WINDOWS_DATA = [
+    {
+        'url':'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip',
+        'files': [
+            ('bin/ffmpeg.exe', 'ffmpeg.exe'),
+            ('bin/ffprobe.exe', 'ffprobe.exe'),
+        ]
+     }
+]
+LINUX_DATA = [
+    {
+        'url':'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz',
+        'files': [
+            ('bin/ffmpeg', 'ffmpeg'),
+            ('bin/ffprobe', 'ffprobe'),
+        ]
+    }
+]
+MACOS_DATA = [
+    {
+        'url': 'https://evermeet.cx/ffmpeg/ffmpeg-8.0.zip',
+        'files': [
+            ('ffmpeg', 'ffmpeg'),
+        ]
+    },
+    {
+        'url': 'https://evermeet.cx/ffmpeg/ffprobe-8.0.zip',
+        'files': [
+            ('ffprobe', 'ffprobe'),
+        ]
+    }
+]
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,8 +54,9 @@ def on_installed(package: APackageManager, ws_manager: AWorkspaceManager):
     if not ws_manager.bin_path.exists():
         raise FileExistsError('Binary dir not exists. Workspace not installed?')
     # download ffmpeg binary
-    print('Download ffmpeg to', ws_manager.bin_path)
-    files = download_binary(ws_manager.bin_path.as_posix())
+    logger.info('Download ffmpeg to %s', ws_manager.bin_path)
+    info = get_info_data()
+    files = get_remote_files(info, ws_manager.bin_path.as_posix())
     if os.name != 'nt':
         for file in files:
             file = Path(file)
@@ -37,65 +66,80 @@ def on_installed(package: APackageManager, ws_manager: AWorkspaceManager):
 
 def after_uninstalling(package: APackageManager, ws_manager: AWorkspaceManager):
     # delete ffmpeg binary
-    print('Uninstalling ffmpeg package')
+    logger.info('Uninstalling ffmpeg binary')
     cleanup_binary(ws_manager.bin_path.as_posix())
 
 
 # tools
 
-def get_link_list():
+def get_info_data():
     if os.name == 'nt':
-        return (WINDOWS_URL,)
+        return WINDOWS_DATA
     elif os.name == 'posix':
-        return (LINUX_URL,)
+        return LINUX_DATA
     elif os.name == 'darwin':
-        return MACOS_URL
+        return MACOS_DATA
     else:
         raise ValueError('Unknown OS')
 
 
-def extract_tools(src_directory, destination_dir):
-    result = []
-    for tool_name in TOOLS_TO_INSTALL:
-        for path in src_directory.rglob(tool_name):
-            if path.is_file():
-                logger.info(f'Copy file: {path.name}')
-                dest = Path(destination_dir) / path.name
-                shutil.copyfile(path, dest)
-                result.append(dest)
-    return result
+def cleanup_binary(source_dir):
+    info = get_info_data()
+    for inf in info:
+        for _, path in inf['files']:
+            full_path = Path(source_dir, path)
+            if full_path.exists():
+                full_path.unlink()
 
 
-def download_binary(destination_dir: str|Path):
-    # delete old
-    cleanup_binary(destination_dir)
-    # download latest versions
-    links = get_link_list()
-    copied_files = []
+def get_remote_files(remote_info_list: list[dict], target_dir: str) -> list:
+    result_files = []
+    key = hashlib.sha1(json.dumps(remote_info_list, sort_keys=True).encode('utf-8')).hexdigest()  # type: ignore
+    try:
+        result_files = list(get_files_from_cache(key))
+    except FileNotFoundError:
+        for inf in remote_info_list:
+            for root, rel_path in download_remove_files(inf):
+                for archive_file, save_path in inf['files']:
+                    if str(rel_path) == archive_file:
+                        full_path, relative = save_file_to_cache(key, root / rel_path, save_path)
+                        result_files.append((full_path, relative))
+    for full_path, rel_path in result_files:
+        link_path = Path(target_dir, rel_path)
+        link_path.parent.mkdir(parents=True, exist_ok=True)
+        if link_path.exists():
+            link_path.unlink()
+        link_path.hardlink_to(full_path)
+        logger.info(f'Linked file: {rel_path}')
+    return [x[0] for x in result_files]
+
+
+def download_remove_files(remote_info: dict) -> list:
     with tempfile.TemporaryDirectory() as tmpdir:
         download_dir = Path(tmpdir, 'downloaded')
-        for link in links:
-            logger.info(f'Download file: {link}')
-            net.download_file(link, download_dir.as_posix(), allow_redirects=True)
+        logger.info(f'Download file: {remote_info["url"]}')
+        net.download_file(remote_info["url"], download_dir.as_posix(), allow_redirects=True, skip_exists=True)
         extract_dir = Path(tmpdir, 'extracted')
-        # extract tar
-        for archive in itertools.chain(Path(download_dir).rglob('*.tar*')):
-            logger.info(f'Extracting archive: {archive}')
-            with tarfile.open(archive, "r:xz") as tar:
-                tar.extractall(path=extract_dir/archive.name)
-            files = extract_tools(extract_dir/archive.name, destination_dir)
-            copied_files.extend(files)
-        # extract zip
-        for archive in Path(tmpdir).rglob('*.zip'):
-            logger.info(f'Extracting archive: {archive}')
-            shutil.unpack_archive(archive, extract_dir/archive.name)
-            files = extract_tools(extract_dir / archive.name, destination_dir)
-            copied_files.extend(files)
-    return copied_files
+        archive = next(Path(download_dir).iterdir(), None)
+        if not archive:
+            raise FileNotFoundError('No archive found, Download failed.')
+        if archive.stat().st_size == 0:
+            raise FileNotFoundError('Downloaded file is empty, Download failed.')
+        archive_dir = extract_archive(archive, extract_dir)
+        for file in archive_dir.rglob('*'):
+            if file.is_file():
+                yield archive_dir, file.relative_to(archive_dir)
 
 
-def cleanup_binary(source_dir):
-    for tool in TOOLS_TO_INSTALL:
-        for path in Path(source_dir).rglob(tool):
-            path.unlink()
+def extract_archive(archive_path: Path, target_path: Path):
+    logger.info(f'Extracting archive: {archive_path}')
+    if archive_path.name.endswith('tar') or archive_path.name.endswith('tar.xz'):
+        with tarfile.open(archive_path, "r:xz") as tar:
+            tar.extractall(path=target_path.as_posix())
+    elif archive_path.suffix == '.zip':
+        shutil.unpack_archive(archive_path, target_path)
+    else:
+        raise ValueError(f'Unsupported archive type: {archive_path}')
+    return next(target_path.iterdir())
+
 
