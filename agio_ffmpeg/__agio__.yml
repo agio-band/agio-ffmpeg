@@ -5,7 +5,7 @@ description: |
 icon: ""
 
 required_packages: [
-  'agio-core>=0.0.4'
+  'agio_core>=0.0.4'
 ]
 
 urls:
