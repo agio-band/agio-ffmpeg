@@ -56,6 +56,8 @@ def on_installed(package: APackageManager, ws_manager: AWorkspaceManager):
     logger.info('Download ffmpeg to %s', ws_manager.bin_path)
     info = get_info_data()
     files = get_remote_files(info, ws_manager.bin_path.as_posix())
+    if not files:
+        raise IOError('No ffmpeg tools downloaded')
     if os.name != 'nt':
         for file in files:
             file = Path(file)
@@ -92,6 +94,7 @@ def cleanup_binary(source_dir):
 
 
 def get_remote_files(remote_info_list: list[dict], target_dir: str) -> list:
+    logger.info('Download ffmpeg to %s', target_dir)
     result_files = []
     key = hashlib.sha1(json.dumps(remote_info_list, sort_keys=True).encode('utf-8')).hexdigest()  # type: ignore
     try:

@@ -1,6 +1,6 @@
 [project]
 name = "agio-ffmpeg"
-version = "0.0.5"
+version = "0.0.6"
 description = "FFmpeg tools for agio pipeline"
 authors = [
     { name = "paul", email = "paulwinex@gmail.com" }
