@@ -51,8 +51,7 @@ logger = logging.getLogger(__name__)
 
 def on_installed(package: APackageManager, ws_manager: AWorkspaceManager):
     # TODO use cache
-    if not ws_manager.bin_path.exists():
-        raise FileExistsError('Binary dir not exists. Workspace not installed?')
+    ws_manager.bin_path.mkdir(parents=True, exist_ok=True)
     # download ffmpeg binary
     logger.info('Download ffmpeg to %s', ws_manager.bin_path)
     info = get_info_data()
