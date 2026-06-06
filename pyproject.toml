@@ -1,13 +1,13 @@
 [project]
 name = "agio-ffmpeg"
-version = "0.0.9"
+version = "0.0.10"
 description = "FFmpeg tools for agio pipeline"
 authors = [
     { name = "paul", email = "paulwinex@gmail.com" }
 ]
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 
 dependencies = []
 
